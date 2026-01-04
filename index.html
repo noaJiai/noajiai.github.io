@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>初めてつくってみたｗ　10ｔｈ</title>
+    <!-- Tailwind CSS (デザイン用) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel (ブラウザでJSXを変換するため) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- スタイル調整 -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; }
+        
+        /* アニメーション定義 */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideLeft { from { transform: translateX(10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideRight { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        .animate-slide-left { animation: slideLeft 0.3s ease-out; }
+        .animate-slide-right { animation: slideRight 0.3s ease-out; }
+        .animate-spin-slow { animation: spin 3s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* スクロールバー装飾 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.5); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- React Code -->
+    <script type="text/babel" data-type="module">
+        import { useState, useEffect, useRef } from 'https://esm.sh/react@18?deps=react@18';
+        import { createRoot } from 'https://esm.sh/react-dom@18/client?deps=react@18';
+        // lucide-react アイコンをCDNからインポート
+        import { Terminal, Menu, Hash, MessageCircle, AlertTriangle, Play, ChevronRight, RefreshCcw, BookOpen, Clock, X, Lock, Eye, WifiOff, Users, ArrowRight, Folder, FileText } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18';
+
+        const ChatNovelApp = () => {
+            const [currentEpisodeId, setCurrentEpisodeId] = useState(1);
+            const [messages, setMessages] = useState([]);
+            const [currentStep, setCurrentStep] = useState(0);
+            const [isTyping, setIsTyping] = useState(false);
+            const [activeTab, setActiveTab] = useState('main'); 
+            const [showMenu, setShowMenu] = useState(false);
+            const [showDMAlert, setShowDMAlert] = useState(false);
+            const [selectedChapter, setSelectedChapter] = useState(1);
+            
+            // State
+            const [currentYear, setCurrentYear] = useState(2025);
+            const [viewingProfile, setViewingProfile] = useState(null); 
+            const [profiles, setProfiles] = useState({}); 
+
+            const messagesEndRef = useRef(null);
+            const scrollContainerRef = useRef(null);
+
+            // --- Safe Profile Access Helper ---
+            const getSafeProfile = (name) => {
+                if (!name || !profiles[name]) {
+                return { 
+                    role: 'Unknown', 
+                    age: '?', 
+                    status: 'offline', 
+                    color: 'text-gray-500', 
+                    bg: 'bg-gray-500', 
+                    isMe: false, 
+                    desc: 'データが見つかりません。' 
+                };
+                }
+                return profiles[name];
+            };
+
+            // --- Profiles Data ---
+            const defaultProfiles2025 = {
+                '汐': { role: '管理人', age: '24歳', status: 'tired', color: 'text-pink-400', bg: 'bg-pink-600', isMe: true, desc: '都内のIT企業で働くSE。10年前の事件以来、罪悪感を抱えて生きている。今日が10周年であることは、誰にも言っていない。' },
+                'なぬりん': { role: '観測者', age: '??歳', status: 'online', color: 'text-purple-400', bg: 'bg-purple-600', desc: '10年前の事件直前に現れた謎のメンバー。その正体は不明だが、汐の行動を監視しているようだ。' },
+                'あざみん': { role: 'MISSING', age: '26歳(当時)', status: 'error', color: 'text-red-500', bg: 'bg-red-600', desc: '【ERROR】 存在しないユーザーです。10年前の今日、忽然と姿を消した。警察の捜査も打ち切られている。' },
+                'あざみん(未来)': { role: 'Unknown', age: '??', status: 'error', color: 'text-red-600', bg: 'bg-red-900', desc: '2025年のチャットルームに現れたアカウント。中身が本人なのか、プログラムなのか、あるいは……。' },
+                '來夢': { role: '副管理人', age: '24歳', status: 'offline', color: 'text-green-400', bg: 'bg-green-800', desc: '事件後、汐とは疎遠になった。現在は連絡が取れない。' },
+                'りー': { role: 'メンバー', age: '24歳', status: 'offline', color: 'text-sky-400', bg: 'bg-sky-800', desc: '事件後、アカウントを削除している。' },
+                'カノ': { role: 'メンバー', age: '24歳', status: 'offline', color: 'text-teal-400', bg: 'bg-teal-800', desc: '事件後、ログインしていない。' },
+                '心宙': { role: 'メンバー', age: '24歳', status: 'offline', color: 'text-gray-400', bg: 'bg-gray-700', desc: '事件後、ログインしていない。' },
+                'ふうちゃん': { role: 'メンバー', age: '24歳', status: 'offline', color: 'text-indigo-400', bg: 'bg-indigo-800', desc: '事件後、ログインしていない。' },
+            };
+
+            const defaultProfiles2015 = {
+                '汐': { role: '管理人', age: '14歳(中2)', status: 'online', color: 'text-pink-600', bg: 'bg-pink-500', isMe: true, desc: 'ネット上にしか居場所がない中学生。プログラミングを独学し、みんなが集まれる場所を作った。精神は24歳のままタイムリープ中。' },
+                'なぬりん': { role: '新人', age: '??歳', status: 'online', color: 'text-purple-600', bg: 'bg-purple-500', desc: '最後に入ってきたメンバー。飄々とした態度で、核心を突く発言をする。' },
+                'あざみん': { role: '保護者役', age: '26歳', status: 'online', color: 'text-blue-600', bg: 'bg-blue-500', desc: '面倒見の良いお兄さんSE。仕事の合間にチャットに顔を出し、技術的な相談に乗ってくれる。住んでいる場所も本名も誰も知らない。' },
+                '來夢': { role: '副管理人', age: '14歳', status: 'online', color: 'text-green-600', bg: 'bg-green-500', desc: '別の掲示板で知り合った、汐のネット上の親友。住んでいる県は違うが、一番の理解者。' },
+                'りー': { role: 'メンバー', age: '14歳', status: 'online', color: 'text-sky-600', bg: 'bg-sky-500', desc: '少し理屈っぽい性格。「それバグじゃね？」が口癖。' },
+                'カノ': { role: 'メンバー', age: '14歳', status: 'online', color: 'text-teal-600', bg: 'bg-teal-500', desc: 'ノリが軽い男子。「ｗ」を多用する。ゲームの話ばかりしている。' },
+                '心宙': { role: 'メンバー', age: '14歳', status: 'online', color: 'text-gray-600', bg: 'bg-gray-500', desc: '口数は少ないが、実は一番周りを見ている。' },
+                'ふうちゃん': { role: 'メンバー', age: '14歳', status: 'online', color: 'text-indigo-500', bg: 'bg-indigo-500', desc: '天然キャラ。「～なのだ」等は言わないが、独特の空気感がある。' },
+            };
+
+            // --- Scenarios ---
+            const episodes = [
+                {
+                id: 1,
+                chapter: 1,
+                title: "Hello World / Goodbye World",
+                description: "2025年10月10日。孤独な夜に届いた通知が、止まっていた時間を動かす。",
+                script: [
+                    { type: 'set_year', year: 2025 },
+                    { type: 'narrative', text: "2025年10月10日（金） 午後11時58分\n東京都内 - 汐のワンルームマンション" },
+                    { type: 'monologue', text: "（……あーあ。また終電だ。）" },
+                    { type: 'action', text: "汐は重たい足取りで帰宅し、カバンを放り投げた。コンビニ弁当の袋がカサリと音を立てる。" },
+                    { type: 'monologue', text: "（今日は10周年。……なんて、誰も覚えてないか。私も忘れたかった。）" },
+                    { type: 'narrative', text: "部屋の片隅で、埃をかぶった古いノートPCが目に入った。なぜか今日に限って、開いてみたい衝動に駆られた。" },
+                    { type: 'action', text: "PCを起動する。ファンの音がうるさい。ブックマークの最下層にある「First Time Chat」をクリックした。" },
+                    { type: 'system', text: 'CONNECTING TO SERVER: FIRST_TIME_W...' },
+                    { type: 'system', text: 'CONNECTION ESTABLISHED. MEMBERS ONLINE: 1' },
+                    { type: 'chat', sender: '汐', text: '……誰もいないよね。うん、知ってた。' },
+                    { type: 'monologue', text: "（画面は真っ黒。10年前、私が「かっこいいから」って理由だけで背景を黒にしたんだっけ。今見ると、ただの闇だ。）" },
+                    { type: 'chat', sender: '汐', text: '10周年おめでとう、私。そして、ごめんなさい。' },
+                    { type: 'narrative', text: "エンターキーを押した瞬間、部屋の空気が変わった気がした。背筋がゾクリとする感覚。" },
+                    { type: 'system', text: 'NOTIFICATION: NEW MEMBER ENTRY' },
+                    { type: 'narrative', text: "ピロン♪ という軽快な音が、静まり返った部屋に響き渡る。" },
+                    { type: 'monologue', text: "（え？ 通知？ バグ？）" },
+                    { type: 'chat', sender: 'なぬりん', text: 'こんばんは。' },
+                    { type: 'chat', sender: 'なぬりん', text: '10周年おめでとう、汐。' },
+                    { type: 'monologue', text: "（なぬりん……？ 最後に入ってきた子。でも、もう何年も連絡なんて……）" },
+                    { type: 'chat', sender: '汐', text: 'え……なぬりん？ 本当に？ 生きてたの？' },
+                    { type: 'chat', sender: 'なぬりん', text: '生きてるよ。汐こそ、死んだような顔して生きてるんじゃない？' },
+                    { type: 'chat', sender: '汐', text: '……何それ。久しぶりに話したと思ったら。' },
+                    { type: 'chat', sender: 'なぬりん', text: '待ってたよ。この日が来るのをずっとね。' },
+                    { type: 'chat', sender: 'なぬりん', text: '今日なら、彼と繋がれるから。' },
+                    { type: 'monologue', text: "（彼？ まさか……）" },
+                    { type: 'system', text: 'WARNING: UNAUTHORIZED USER DETECTED' },
+                    { type: 'system', text: 'USER [Azamin] LOGGED IN.' },
+                    { type: 'update_profile', name: 'あざみん', updates: { status: 'online', desc: 'ERROR: 死亡または失踪したはずのアカウントがアクティブです。' } },
+                    { type: 'chat', sender: '汐', text: 'っ！？' },
+                    { type: 'chat', sender: '汐', text: '嘘……あざみんさん？' },
+                    { type: 'monologue', text: "（ありえない。あざみんのアカウントは10年前に凍結されている。パスワードを知っているのは本人だけ。でも、本人はもう……。）" },
+                    { type: 'chat', sender: 'あざみん', text: '……' },
+                    { type: 'chat', sender: 'あざみん', text: '見つけた。' },
+                    { type: 'chat', sender: '汐', text: '誰なんですか。悪ふざけならやめてください！' },
+                    { type: 'chat', sender: '汐', text: '彼はもういないんです！ 10年前に……！' },
+                    { type: 'chat', sender: 'あざみん', text: 'いない？ 俺はここにいるよ。ずっとこのログの中にいたんだ。' },
+                    { type: 'chat', sender: 'あざみん', text: '汐ちゃん。大きくなったね。会社勤めは辛いかい？ 君が書いたコード、まだバグだらけだったよ。' },
+                    { type: 'monologue', text: "（なんで、今の私のことを知ってるの？ 私が今の会社でコードを書いてることも……）" },
+                    { type: 'chat', sender: 'あざみん', text: '約束通り、デバッグの時間だ。世界の修正を始めよう。' },
+                    { type: 'chat', sender: 'あざみん', text: 'EXECUTE: TIME_LEAP_PROTOCOL' },
+                    { type: 'narrative', text: "あざみんがそう書き込んだ瞬間、PCの画面が強烈な光を放った。ディスプレイから溢れ出した光が、汐の身体を飲み込んでいく。" },
+                    { type: 'chat', sender: '汐', text: 'な、なにこれ……熱い、目が、回る……' },
+                    { type: 'system', text: 'CRITICAL ERROR: TEMPORAL DISPLACEMENT INITIATED...' },
+                    { type: 'system', text: 'REBOOTING SYSTEM... TARGET DATE: 2015-10-10' },
+                    { type: 'set_year', year: 2015 }, // TIME LEAP
+                    { type: 'narrative', text: "……\n…………\n………………\n\n「……よし、デプロイ完了！」" },
+                    { type: 'narrative', text: "自分の声でハッとして目を開けた。目の前には、懐かしい学習机。ガラケーの充電器。壁にはアイドルのポスター。" },
+                    { type: 'monologue', text: "（え？ ここ、実家？ 私の部屋？ なんで？ さっきまでマンションに……）" },
+                    { type: 'action', text: "汐は慌てて自分の手を見た。小さくて、少し日焼けした中学生の手だ。カレンダーは2015年10月10日。" },
+                    { type: 'chat', sender: 'あざみん', text: 'お、一番乗り。' },
+                    { type: 'chat', sender: 'あざみん', text: 'はじめまして。偶然見つけたから入ってみた。これ、自作？' },
+                    { type: 'monologue', text: "（このログ……覚えてる。10年前の最初の日だ。あざみんさんの、最初の言葉。）" },
+                    { type: 'update_profile', name: '汐', updates: { desc: '精神は24歳、身体は14歳。タイムリープ中。' } },
+                    { type: 'monologue', text: "（戻ってきたの？ 私が、あざみんさんを殺してしまう、あの始まりの日に。）" }
+                ]
+                },
+                {
+                id: 2,
+                chapter: 1,
+                title: "再定義される変数",
+                description: "14歳の姿で迎える2度目の「あの日」。チャットだけで繋がった仲間たち。",
+                script: [
+                    { type: 'set_year', year: 2015 },
+                    { type: 'narrative', text: "2015年10月10日（土）\n汐の自室 - 14歳の肉体" },
+                    { type: 'monologue', text: "（夢じゃない。この感覚、匂い。私は本当に過去にいる。……なら、今度こそあざみんを救える？ あの事件を回避できる？）" },
+                    { type: 'narrative', text: "画面の中では、まだ「他人」であるあざみんが、返事を待っている。アイコンはデフォルトの青い人型だ。" },
+                    { type: 'chat', sender: '汐', text: '……あざみんさん、ですか？' },
+                    { type: 'chat', sender: 'あざみん', text: 'お、さん付け？ 丁寧だねえ。あざみんでいいよ。もしかして緊張してる？' },
+                    { type: 'chat', sender: 'あざみん', text: 'HTMLの手打ち感があって懐かしいな。このmarqueeタグとか、久しぶりに見たよ。' },
+                    { type: 'chat', sender: '汐', text: 'あ、はい。勉強中なんです。……少し、緊張してます。' },
+                    { type: 'monologue', text: "（涙が出そうだ。あの頃のままだ。優しくて、少しお節介で、技術の話になると早口になる、頼れる大人。）" },
+                    { type: 'system', text: 'MEMBERS JOINING...' },
+                    { type: 'chat', sender: '來夢', text: 'やっほー！ 汐ちゃん！ 入れたよー！' },
+                    { type: 'chat', sender: '汐', text: '……來夢！？' },
+                    { type: 'chat', sender: '來夢', text: 'えへへ、一番乗りかと思ったのに先客がいたｗ メールで「今日絶対オープンする」って言ってたもんね！' },
+                    { type: 'chat', sender: 'りー', text: '招待状届いたから来てみたけど……ソースコード汚いな。インデント揃えてないでしょ。' },
+                    { type: 'chat', sender: 'カノ', text: 'うっす。ここが新しい溜まり場？ 重くない？ 俺の回線がクソなだけ？' },
+                    { type: 'chat', sender: 'ふうちゃん', text: 'わあ～黒い画面だあ。ハッカーみたい！ かっこいいー！' },
+                    { type: 'chat', sender: '心宙', text: 'おじゃまします。' },
+                    { type: 'monologue', text: "（みんな……生きてる。まだ壊れてない。）" },
+                    { type: 'monologue', text: "（学校でも家でも居場所がない私たちが、ネットの海でようやく見つけた、たった一つの集合場所。）" },
+                    { type: 'chat', sender: '汐', text: 'みんな、来てくれてありがとう……本当に、ありがとう。' },
+                    { type: 'chat', sender: 'カノ', text: 'なんだよ汐、感極まってんのか？ｗ 初めての自分の城だしなー。' },
+                    { type: 'chat', sender: 'りー', text: 'まあ、中2でチャットルーム自作は頑張ったんじゃない？ セキュリティはザルだろうけど。' },
+                    { type: 'chat', sender: 'あざみん', text: 'お、賑やかになってきたね。管理人の汐ちゃん、人望あるじゃん。' },
+                    { type: 'chat', sender: '來夢', text: 'そうなんですよお兄さん！ 汐ちゃん、普段は遠慮がちだけど、やるときはやる子なんです！' },
+                    { type: 'chat', sender: '汐', text: 'ちょ、來夢！ 恥ずかしいからやめてよ！' },
+                    { type: 'monologue', text: "（このノリ。懐かしい。顔も知らない、住んでる場所も違う。でも、誰よりも心を許せる仲間たち。）" },
+                    { type: 'system', text: 'NOTIFICATION: NEW MEMBER ENTRY' },
+                    { type: 'narrative', text: "その時、最後のメンバーが入室した。" },
+                    { type: 'chat', sender: 'なぬりん', text: '……' },
+                    { type: 'chat', sender: 'なぬりん', text: 'はじめまして、かな？' },
+                    { type: 'monologue', text: "（え？）" },
+                    { type: 'monologue', text: "（『かな？』……？ なぬりんの反応が記憶と違う。1周目は『ここ、なんか落ち着くね』だったはず。）" },
+                    { type: 'switch_tab', tab: 'dm' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'ねえ、汐ちゃん。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'みんなとの再会、楽しんでる？ 泣きそうになってたね。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'でも、既読スルーしないでね。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '気づいてるでしょ？ そのサイトのソースコード。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'それを書いたのは、14歳の汐ちゃんじゃないよ。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '2周目、頑張ってね。今回はあざみんを殺さないように。' },
+                    { type: 'monologue', text: "（こいつ……知ってる。私がタイムリープしてきたことを。）" },
+                    { type: 'update_profile', name: 'なぬりん', autoOpen: true, updates: { desc: '汐のタイムリープを認識している「観測者」。敵か味方かは不明。' } },
+                    { type: 'dm_send', text: 'あなたは誰？ 何を知ってるの？ 未来から来たの？' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '私はただの観客だよ。汐ちゃんの物語を特等席で見たいだけ。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'でも、ヒントくらいはあげる。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'メインルームを見て。あざみんが、君が隠し持ってきた「未来の毒」に気づき始めてる。' },
+                    { type: 'switch_tab', tab: 'main' },
+                    { type: 'system', text: 'ALERT: FUTURE TIMELINE INTERFERENCE DETECTED' },
+                    { type: 'chat', sender: 'あざみん', text: 'ん？ なんだこのコード……おかしくないか？' },
+                    { type: 'chat', sender: 'りー', text: 'どうしたの？ またインデント警察？' },
+                    { type: 'chat', sender: 'あざみん', text: 'いや、そういうレベルじゃない。なんか、見たことない記述がある。' },
+                    { type: 'monologue', text: "（まずい。あざみんさんは優秀なSEだ。私のガバガバなコードの中に混ざった異物に気づく！）" }
+                ]
+                },
+                {
+                id: 3,
+                chapter: 1,
+                title: "バックドアの向こう側",
+                description: "未来からの干渉。あざみんが「開けてはいけない扉」に手をかける。",
+                script: [
+                    { type: 'set_year', year: 2015 },
+                    { type: 'narrative', text: "2015年10月10日（土） 午後11時42分\n運命の時刻まで、あと18分。" },
+                    { type: 'chat', sender: 'あざみん', text: 'うわ、なんだこれ。コードの奥、ループしてるぞ。' },
+                    { type: 'chat', sender: 'りー', text: 'ループ？ while(true)でも書いたの？ 初心者あるあるだね。ブラウザクラッシャーじゃん。' },
+                    { type: 'chat', sender: 'あざみん', text: 'いや、そういう単純なやつじゃない。ポート8080が開いてる。外部と通信しようとしてるな、これ。' },
+                    { type: 'update_profile', name: 'あざみん', updates: { status: 'investigating', desc: 'チャットのコードに違和感を抱き、調査を開始した。危険な状態。' } },
+                    { type: 'chat', sender: '汐', text: 'えっ？ 通信？ 変だな、何も設定してないはずなんだけど……' },
+                    { type: 'chat', sender: '汐', text: 'ただの掲示板のスクリプトをコピペしただけで……' },
+                    { type: 'monologue', text: "（嘘だ。それは未来の私が無意識に繋げた、2025年へのパスだ！ あざみんさんに見つかったら、パラドックスが起きる！）" },
+                    { type: 'chat', sender: 'あざみん', text: 'だよなあ。中学生がソケット通信なんて書けるわけないし。WebSocketですらない、独自のプロトコルだ。' },
+                    { type: 'chat', sender: 'あざみん', text: 'ちょっと俺がトレース（追跡）してみるわ。接続元のIP抜けるかも。' },
+                    { type: 'chat', sender: 'カノ', text: 'お、あざみんの本気モード？ ハッキング対決か？ｗ' },
+                    { type: 'chat', sender: 'ふうちゃん', text: 'すごーい！ 悪い人やっつけてー！' },
+                    { type: 'chat', sender: '汐', text: '待って！ あざみんさん、触らないで！ お願い！' },
+                    { type: 'chat', sender: '心宙', text: '……汐ちゃん？' },
+                    { type: 'chat', sender: '心宙', text: 'なんでそんなに必死なの？' },
+                    { type: 'chat', sender: '汐', text: '今は言えないけど……とにかく危険なの！ ウイルスかも知れないし！' },
+                    { type: 'chat', sender: 'あざみん', text: '大丈夫だって。お兄さんに任せなさい。変なウイルスだったら困るだろ？ 駆除してやるよ。' },
+                    { type: 'narrative', text: "止まらない。あざみんの好奇心と善意が、最悪の引き金を引こうとしている。" },
+                    { type: 'system', text: 'WARNING: UNAUTHORIZED CONNECTION DETECTED' },
+                    { type: 'system', text: 'TRACING ROUTE TO 2025.10.10...' },
+                    { type: 'chat', sender: 'あざみん', text: '……は？' },
+                    { type: 'chat', sender: 'あざみん', text: 'なんだこのタイムスタンプ。' },
+                    { type: 'chat', sender: 'あざみん', text: 'Last Login: 2025-10-10... Fri?' },
+                    { type: 'chat', sender: 'りー', text: '2025年？ パソコンの日付設定狂ってるんじゃない？ BIOSの電池切れ？' },
+                    { type: 'chat', sender: 'あざみん', text: 'いや……PC設定は正常だ。NTPサーバーとも同期してる。' },
+                    { type: 'chat', sender: 'あざみん', text: 'これ、マジで外部サーバーからのレスポンスだぞ。しかも、未来からの。' },
+                    { type: 'chat', sender: 'あざみん', text: '汐ちゃん。君、このチャットルームの「元ネタ」、どこから拾ってきた？' },
+                    { type: 'monologue', text: "（見られた。あざみんさんの文体から「笑い」が消えた。エンジニアの目になってる。）" },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'ほら、始まった。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '10年前、あざみんはこの「矛盾」を深追いして、「世界のバグ」として処理されたんだ。' },
+                    { type: 'chat', sender: 'あざみん', text: '特定した。接続先は……東京都内、ISPは……俺の家の近く？' },
+                    { type: 'narrative', text: "その瞬間、汐のPC画面が激しく明滅した。まるで、向こう側で何かが起きたように。" },
+                    { type: 'chat', sender: 'あざみん', text: 'え、なんだこれ。' },
+                    { type: 'chat', sender: 'あざみん', text: '俺の部屋、今……電気が消えた。' },
+                    { type: 'chat', sender: 'あざみん', text: '誰かいる。' },
+                    { type: 'chat', sender: 'カノ', text: 'は？ 怖がらせんなよｗ ホラー展開？' },
+                    { type: 'chat', sender: 'あざみん', text: 'いや、マジだ。ドアの外に誰か……足音がする。' },
+                    { type: 'chat', sender: 'あざみん', text: 'ガチャガチャしてる。鍵開けようとしてる。' },
+                    { type: 'chat', sender: 'あざみん', text: 'おい、誰だ！' },
+                    { type: 'chat', sender: 'あざみん', text: 'うわ、入ってきｔ' },
+                    { type: 'system', text: 'CONNECTION LOST: [Azamin]' },
+                    { type: 'update_profile', name: 'あざみん', autoOpen: true, updates: { status: 'offline', desc: '【通信途絶】 2015年10月10日 23:45。何者かの襲撃を受けた可能性あり。' } },
+                    { type: 'chat', sender: '汐', text: 'あざみんさん！！！' },
+                    { type: 'chat', sender: '來夢', text: 'あざみん？ ねえ、どうしたの？ 返事してよ！' },
+                    { type: 'chat', sender: 'りー', text: '落ちた？ 回線切れかな。それともブレーカー落ちたとか。' },
+                    { type: 'chat', sender: 'カノ', text: 'ドッキリだろ？ 手が込んでるなー。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'あーあ。また失敗？' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '彼、最後に「誰かいる」って言ったね。1周目にはなかった言葉だよ。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '歴史、変わっちゃったね。悪い方向に。' },
+                    { type: 'narrative', text: "あざみんのアイコンが、無慈悲なグレー（オフライン）に変わった。その色は、まるで遺影のように見えた。\n汐の叫びは、10年前の夜空に吸い込まれていった。" }
+                ]
+                },
+                {
+                id: 4,
+                chapter: 1,
+                title: "消失点 (Vanishing Point)",
+                description: "救済の失敗。そして汐は、残酷な「現在」へと引き戻される。",
+                script: [
+                    { type: 'set_year', year: 2015 },
+                    { type: 'narrative', text: "2015年10月10日（土） 午後11時46分" },
+                    { type: 'chat', sender: '汐', text: 'あざみんさん！ 返事して！ お願い！' },
+                    { type: 'chat', sender: '心宙', text: '……様子がおかしい。' },
+                    { type: 'chat', sender: '來夢', text: '汐ちゃん、どうしたの？ ただの回線落ちでしょ？ すぐ戻ってくるよ。' },
+                    { type: 'chat', sender: '汐', text: '違うの！ 今すぐ逃げないと……彼が危ないの！' },
+                    { type: 'chat', sender: 'りー', text: '逃げるって、誰から？ あざみんの家、誰も知らないでしょ。' },
+                    { type: 'chat', sender: 'カノ', text: 'おいおい、汐。マジでテンパってる？ 演技ならアカデミー賞もんだぞ。' },
+                    { type: 'monologue', text: "（誰も信じてくれない。当然だ。私たちはネットだけの関係。住所も、電話番号さえも知らない。）" },
+                    { type: 'chat', sender: '汐', text: 'お願い、誰かIPから住所特定できない！？ 警察呼ばないと！' },
+                    { type: 'chat', sender: 'ふうちゃん', text: 'ええ……そんなことしたら、あざみん怒るよ……？' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '無駄だよ。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '事象は確定した。「あざみんは今日、ここから消える」。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'これ以上はエラーが増えるだけ。強制ログアウトさせるね。' },
+                    { type: 'narrative', text: "なぬりんからのDMが届いた瞬間、チャットルームの文字が赤く染まり始めた。" },
+                    { type: 'system', text: 'CRITICAL ERROR: PARADOX THRESHOLD EXCEEDED' },
+                    { type: 'system', text: 'FORCED LOGOUT SEQUENCE INITIATED...' },
+                    { type: 'chat', sender: '汐', text: '待って！ まだやり直せる！ まだ時間は――' },
+                    { type: 'chat', sender: '來夢', text: '汐ちゃん？ 文字化けしてるよ？' },
+                    { type: 'chat', sender: 'りー', text: 'サーバー落ちるぞ！ なんだこれ！' },
+                    { type: 'narrative', text: "視界がブラックアウトする。14歳の身体の感覚が遠のき、重苦しい「大人の身体」の感覚が戻ってくる。" },
+                    { type: 'set_year', year: 2025 },
+                    { type: 'narrative', text: "……\n…………\n\n「はっ……！？」" },
+                    { type: 'narrative', text: "汐は勢いよく身を起こした。冷え切ったコンビニ弁当。ファンの音。2025年のワンルームマンション。" },
+                    { type: 'chat', sender: '汐', text: '……戻って、きた……？' },
+                    { type: 'monologue', text: "（失敗した。助けられなかった。それどころか、「誰か」に襲われる結末に変えてしまった。）" },
+                    { type: 'chat', sender: 'なぬりん', text: 'おかえり、汐。' },
+                    { type: 'chat', sender: 'なぬりん', text: '残念だったね。でも、いいデータが取れたよ。' },
+                    { type: 'chat', sender: '汐', text: 'あんた……何なの！？ あざみんさんをどうしたの！' },
+                    { type: 'chat', sender: 'なぬりん', text: '私は何もしてない。彼を殺したのは、君が持ち込んだ「未来」だよ。' },
+                    { type: 'system', text: 'LOG UPDATE: HISTORY REWRITTEN' },
+                    { type: 'update_profile', name: 'あざみん', autoOpen: true, updates: { desc: '【UPDATE】 10年前の今日、自宅にて何者かに襲撃され行方不明。現場には争った形跡があった。' } },
+                    { type: 'narrative', text: "画面上のあざみんのプロフィールが、目の前で書き換わった。「失踪」から「襲撃」へ。私のせいで、事態は悪化した。" },
+                    { type: 'chat', sender: 'なぬりん', text: 'さて、第3周目を始めようか。' },
+                    { type: 'chat', sender: 'なぬりん', text: '次はもっと上手く踊ってね、管理人さん。' }
+                ]
+                },
+                {
+                id: 5,
+                chapter: 1,
+                title: "観測者の手帳",
+                description: "書き換わった2025年。なぬりんが提示する、仲間たちの「現在の姿」。",
+                script: [
+                    { type: 'set_year', year: 2025 },
+                    { type: 'narrative', text: "2025年10月11日（土） 午前0時15分\n東京都内 - 汐の部屋" },
+                    { type: 'monologue', text: "（手が震えて止まらない。私はあざみんさんを救うどころか、状況を悪化させた。）" },
+                    { type: 'chat', sender: '汐', text: '……ねえ、なぬりん。' },
+                    { type: 'chat', sender: '汐', text: '私が過去を変えたせいで、他のみんなはどうなったの？' },
+                    { type: 'chat', sender: 'なぬりん', text: 'いい質問だね。それが「観測」の醍醐味だよ。' },
+                    { type: 'chat', sender: 'なぬりん', text: '現実を見せてあげる。これが、君が作った新しい2025年だ。' },
+                    { type: 'system', text: 'ACCESSING DATABASE: MEMBERS_CURRENT_STATUS...' },
+                    { type: 'chat', sender: 'なぬりん', text: 'まずは、親友の來夢ちゃんから。' },
+                    { type: 'update_profile', name: '來夢', autoOpen: true, updates: { status: 'offline', desc: '【UPDATE】 10年前の事件後、精神的ショックで不登校に。現在は結婚し二児の母だが、汐からの連絡は全て拒否している。' } },
+                    { type: 'chat', sender: '汐', text: '……拒否？ 來夢が、私を？' },
+                    { type: 'chat', sender: 'なぬりん', text: '当たり前でしょ。あの日、君が「IP特定しろ」なんて叫んでパニックを起こしたせいで、チャットは崩壊したんだから。' },
+                    { type: 'chat', sender: 'なぬりん', text: '次は、りーくん。' },
+                    { type: 'update_profile', name: 'りー', autoOpen: true, updates: { status: 'offline', desc: '【UPDATE】 大手SIerに就職するも、激務で精神を病み休職中。「あの時ログを解析できていれば」と自分を責め続けている。' } },
+                    { type: 'chat', sender: '汐', text: 'そんな……りーは悪くないのに。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'そして、カノ。' },
+                    { type: 'update_profile', name: 'カノ', autoOpen: true, updates: { status: 'error', desc: '【UPDATE】 高校卒業後、行方不明。一説には海外のハッカー集団に関与しているという噂も。' } },
+                    { type: 'chat', sender: '汐', text: '嘘……みんな、バラバラじゃない。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'そうだよ。あざみんという「要石」が抜けたから、君たちの友情は脆くも崩れ去った。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'これが君の選択の結果。' },
+                    { type: 'monologue', text: "（吐き気がする。私のせいだ。私が全部壊した。）" },
+                    { type: 'chat', sender: '汐', text: '……もう一度。' },
+                    { type: 'chat', sender: '汐', text: 'もう一度、チャンスをちょうだい。次は絶対に間違えないから！' },
+                    { type: 'chat', sender: 'なぬりん', text: 'ふふっ、その言葉を待ってたよ。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'でも、ただ戻るだけじゃ同じことの繰り返しだ。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'ヒントをあげる。あざみんのパソコンにあった「あるファイル」を探しなよ。' },
+                    { type: 'chat', sender: '汐', text: 'ファイル……？' },
+                    { type: 'chat', sender: 'なぬりん', text: 'それが全ての始まりであり、終わり。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'さあ、3周目の準備はいい？' },
+                    { type: 'narrative', text: "第5話 完　（続く）" }
+                ]
+                },
+                {
+                id: 6,
+                chapter: 1,
+                title: "不可視の遺言",
+                description: "明かされるあざみんの過去。彼はただのSEではなかった。",
+                script: [
+                    { type: 'set_year', year: 2025 },
+                    { type: 'narrative', text: "2025年10月11日（土） 午前0時20分\n汐の部屋" },
+                    { type: 'chat', sender: '汐', text: 'ファイルって、何のこと？ あざみんさんが何か隠してたの？' },
+                    { type: 'chat', sender: 'なぬりん', text: '隠してたわけじゃないよ。守ってたんだ。' },
+                    { type: 'chat', sender: 'なぬりん', text: '君は「あざみん」のことを何だと思ってた？ 優しいお兄さんSE？' },
+                    { type: 'chat', sender: '汐', text: 'そうでしょ？ 仕事の愚痴とか言ってたし、普通の社会人だって……' },
+                    { type: 'chat', sender: 'なぬりん', text: '半分正解で、半分間違い。' },
+                    { type: 'chat', sender: 'なぬりん', text: '彼は「ホワイトハット」だったんだよ。善良なハッカー。' },
+                    { type: 'chat', sender: '汐', text: 'ハッカー……？' },
+                    { type: 'chat', sender: 'なぬりん', text: '10年前、彼はある巨大なサイバー犯罪組織を追っていた。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'そして、その組織の決定的な証拠データ（ファイル）を入手してしまった。' },
+                    { type: 'chat', sender: 'なぬりん', text: '彼はそれを隠すために、一番安全で、誰も注目しない場所を選んだ。' },
+                    { type: 'chat', sender: '汐', text: 'まさか……' },
+                    { type: 'chat', sender: 'なぬりん', text: 'そう。君が作った、セキュリティがザルで、誰も見向きもしない中学生のチャットルームだ。' },
+                    { type: 'monologue', text: "（そんな。私たちが集まっていたあの場所は、犯罪組織の証拠隠滅場所だったって言うの？）" },
+                    { type: 'update_profile', name: 'あざみん', autoOpen: true, updates: { desc: '【UPDATE】 正体は正義のハッカー。犯罪組織のデータを汐のサーバーに隠したことで命を狙われた。' } },
+                    { type: 'chat', sender: '汐', text: 'じゃあ、あざみんさんが襲われたのは……' },
+                    { type: 'chat', sender: 'なぬりん', text: '組織に特定されたからだよ。' },
+                    { type: 'chat', sender: 'なぬりん', text: '1周目では、彼は静かに連れ去られた。' },
+                    { type: 'chat', sender: 'なぬりん', text: '2周目では、君が未来から通信を繋いだせいで、組織の監視網に引っかかり、強行突入された。' },
+                    { type: 'chat', sender: '汐', text: '私のせいだ……私が余計なことをしたから。' },
+                    { type: 'chat', sender: 'なぬりん', text: '悔やんでる暇はないよ。' },
+                    { type: 'chat', sender: 'なぬりん', text: '3周目のミッションはシンプルだ。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'あざみんがそのファイルをサーバーにアップロードする「前」に、彼を止めるか、そのファイルを別の安全な場所に移すこと。' },
+                    { type: 'chat', sender: '汐', text: 'でも、どうやって？ 私はただの中学生になるんだよ？' },
+                    { type: 'chat', sender: 'なぬりん', text: '君には24歳の知識があるでしょ？ 今なら書けるはずだよ。' },
+                    { type: 'chat', sender: 'なぬりん', text: '彼を出し抜くための、完璧なコードが。' },
+                    { type: 'chat', sender: '汐', text: '……やる。やらせて。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'いい返事だ。' },
+                    { type: 'chat', sender: 'なぬりん', text: 'それじゃ、行ってらっしゃい。3度目の10月10日へ。' },
+                    { type: 'system', text: 'INITIATING TEMPORAL TRANSFER... TARGET: 2015-10-10' },
+                    { type: 'narrative', text: "視界が白く染まる。今度は恐怖はない。明確な目的だけが、汐の意識を繋ぎ止めていた。" }
+                ]
+                },
+                {
+                id: 7,
+                chapter: 1,
+                title: "デバッグ・モード：ハード",
+                description: "3度目の過去。汐は「無知な少女」を演じながら、孤独な戦いを始める。",
+                script: [
+                    { type: 'set_year', year: 2015 },
+                    { type: 'narrative', text: "2015年10月10日（土）\n汐の自室" },
+                    { type: 'monologue', text: "（戻ってきた。3回目。空気の匂いも、ファンの音も、もう慣れたものだ。）" },
+                    { type: 'action', text: "汐は素早くPCを操作し、コンソール画面を開いた。" },
+                    { type: 'chat', sender: 'あざみん', text: 'お、一番乗り。' },
+                    { type: 'chat', sender: 'あざみん', text: 'はじめまして。偶然見つけたから入ってみた。これ、自作？' },
+                    { type: 'monologue', text: "（ここまでは同じ。ここからが勝負だ。）" },
+                    { type: 'update_profile', name: '汐', updates: { desc: '精神は24歳。今回は「無知なフリ」をして裏で動くことを決意。' } },
+                    { type: 'chat', sender: '汐', text: 'あ、はい！ はじめまして！ 中学生です！ プログラミング勉強中なんです＞＜' },
+                    { type: 'chat', sender: 'あざみん', text: 'へえ、すごいね。俺はあざみん。よろしくね。' },
+                    { type: 'monologue', text: "（ごめんなさい、あざみんさん。騙すような真似をして。）" },
+                    { type: 'monologue', text: "（あざみんさんが「ファイル」をアップロードするのは、みんなが寝静まった深夜2時頃のはず。それまでに、サーバーの権限を掌握しないと。）" },
+                    { type: 'system', text: 'MEMBERS JOINING...' },
+                    { type: 'chat', sender: '來夢', text: 'やっほー！ 汐ちゃん！' },
+                    { type: 'chat', sender: '汐', text: '來夢！ 待ってたよー！' },
+                    { type: 'monologue', text: "（明るく。自然に。絶対に怪しまれないように。）" },
+                    { type: 'chat', sender: 'カノ', text: 'うっす。ここが新しい溜まり場？' },
+                    { type: 'chat', sender: 'りー', text: 'ソースコード見たけど……うん、まあ頑張ったね。' },
+                    { type: 'chat', sender: '汐', text: 'えへへ、まだバグだらけだけどねｗ' },
+                    { type: 'monologue', text: "（表ではニコニコ会話しながら、私は裏でSSH接続を試みている。パスワードは……当時の私が設定した誕生日だ。単純すぎて助かった。）" },
+                    { type: 'action', text: "汐の指が高速でキーボードを叩く。チャットの会話と並行して、サーバー内部のディレクトリ構造を把握していく。" },
+                    { type: 'chat', sender: 'あざみん', text: 'ん？ なんかアクセスログ増えてない？' },
+                    { type: 'monologue', text: "（ッ！？ 鋭い。バックグラウンドの処理に気づかれた？）" },
+                    { type: 'chat', sender: '汐', text: 'あ、ごめんなさい！ さっきお父さんが見に来て、F5連打して帰っていったんですｗ' },
+                    { type: 'chat', sender: 'あざみん', text: 'あはは、親父さん熱心だねえｗ びっくりしたよ。' },
+                    { type: 'monologue', text: "（危ない……。でも、これで誤魔化せた。あざみんさんはまだ、私を「ただの中学生」だと信じてる。）" },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'やるじゃん。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: '24歳の演技力、伊達じゃないね。' },
+                    { type: 'dm_receive', sender: 'なぬりん', text: 'でも気をつけて。あざみんも、裏で何か準備してるよ。' },
+                    { type: 'chat', sender: 'あざみん', text: 'さて、夜も更けてきたし、俺もそろそろ本業（デバッグ）しようかな。' },
+                    { type: 'monologue', text: "（来た。「本業」。ハッカーとしての活動だ。）" },
+                    { type: 'monologue', text: "（ここからが本当の戦い。あざみんさんがファイルをアップロードする瞬間、それをインターセプトして、私のローカルに隔離する！）" },
+                    { type: 'narrative', text: "静寂な部屋に、激しいタイピング音だけが響く。14歳の指と24歳の頭脳が、運命を変えるために走り出した。" }
+                ]
+                }
+            ];
+
+            // --- Chapter Data ---
+            const chapters = [
+                { id: 1, title: '第一章：起動 (Boot Sequence)', start: 1, end: 13 },
+                { id: 2, title: '第二章：干渉 (Interference)', start: 14, end: 26 },
+                { id: 3, title: '第三章：収束 (Convergence)', start: 27, end: 39 },
+            ];
+
+            // --- Helpers ---
+            const isPast = currentYear === 2015;
+            const bgColor = isPast ? 'bg-[#f0f8ff]' : 'bg-[#0a0a0a]';
+            const textColor = isPast ? 'text-slate-700' : 'text-slate-300';
+            const headerBg = isPast ? 'bg-white/90 border-blue-200' : 'bg-black/90 border-red-900/30';
+            
+            useEffect(() => {
+                setMessages([]);
+                setCurrentStep(0);
+                setActiveTab('main');
+                setIsTyping(false);
+                
+                if (currentEpisodeId === 1) {
+                setCurrentYear(2025);
+                setProfiles(defaultProfiles2025);
+                } else {
+                setCurrentYear(2015);
+                setProfiles(defaultProfiles2015);
+                }
+            }, [currentEpisodeId]);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages, isTyping, activeTab]);
+
+            const updateProfile = (name, updates) => {
+                if (!name) return; 
+                setProfiles(prev => ({
+                ...prev,
+                [name]: { ...prev[name], ...updates }
+                }));
+            };
+
+            // --- Logic ---
+            const handleNext = () => {
+                const script = episodes.find(e => e.id === currentEpisodeId)?.script;
+                if (!script || currentStep >= script.length) return;
+
+                let tempStep = currentStep;
+                let item = script[tempStep];
+
+                while (item && ['set_year', 'update_profile', 'switch_tab'].includes(item.type)) {
+                if (item.type === 'set_year') {
+                    setCurrentYear(item.year);
+                    setProfiles(item.year === 2015 ? defaultProfiles2015 : defaultProfiles2025);
+                } else if (item.type === 'update_profile') {
+                    updateProfile(item.name, item.updates);
+                    if (item.autoOpen) {
+                    setViewingProfile(item.name);
+                    }
+                } else if (item.type === 'switch_tab') {
+                    setActiveTab(item.tab);
+                }
+                tempStep++;
+                item = script[tempStep];
+                }
+
+                if (!item) {
+                setCurrentStep(tempStep);
+                return;
+                }
+
+                if (item.type === 'dm_receive') {
+                setShowDMAlert(true);
+                setTimeout(() => setShowDMAlert(false), 4000);
+                }
+
+                const targetStepAfterDisplay = tempStep + 1;
+                setIsTyping(true);
+                const delay = (item.type === 'narrative' || item.type === 'monologue') ? 600 : 400;
+                
+                setTimeout(() => {
+                setMessages(prev => [...prev, item]);
+                setIsTyping(false);
+                setCurrentStep(targetStepAfterDisplay);
+                }, delay);
+            };
+
+            const renderMessage = (msg, index) => {
+                const isDM = msg.type === 'dm_send' || msg.type === 'dm_receive';
+                if (activeTab === 'main' && isDM) return null;
+                if (activeTab === 'dm' && !isDM && msg.type !== 'narrative' && msg.type !== 'monologue') return null;
+
+                const profile = getSafeProfile(msg.sender);
+                const isMe = profile.isMe || msg.sender === '汐'; 
+
+                switch (msg.type) {
+                case 'narrative':
+                    return (
+                    <div key={index} className="flex justify-center my-6 animate-fade-in px-4">
+                        <div className={`${isPast ? 'bg-blue-50 text-slate-600 border-blue-200' : 'bg-slate-800/50 text-slate-400 border-slate-600'} border-l-4 text-xs md:text-sm px-6 py-4 w-full max-w-2xl leading-relaxed font-serif shadow-sm`}>
+                        {msg.text.split('\n').map((t, k) => <p key={k} className={k > 0 ? 'mt-2' : ''}>{t}</p>)}
+                        </div>
+                    </div>
+                    );
+                case 'monologue':
+                    return (
+                    <div key={index} className="flex justify-center my-4 animate-fade-in px-8">
+                        <div className={`${isPast ? 'text-slate-500' : 'text-slate-500'} text-xs md:text-sm text-center italic flex items-center gap-2`}>
+                        <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
+                        {msg.text}
+                        <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
+                        </div>
+                    </div>
+                    );
+                case 'action':
+                    return (
+                    <div key={index} className="flex justify-center my-2 animate-fade-in px-8">
+                        <span className="text-[10px] text-slate-400 border border-slate-700/50 bg-black/20 px-3 py-1 rounded-full uppercase tracking-wider">{msg.text}</span>
+                    </div>
+                    );
+                case 'system':
+                    return (
+                    <div key={index} className="flex items-center justify-center gap-2 my-2 animate-pulse px-4 opacity-90">
+                        <Terminal size={12} className={isPast ? 'text-blue-500' : 'text-red-500'} />
+                        <span className={`${isPast ? 'text-blue-600' : 'text-red-500'} text-[10px] md:text-xs font-mono font-bold tracking-wider`}>
+                        {msg.text}
+                        </span>
+                    </div>
+                    );
+                case 'chat':
+                    return (
+                    <div key={index} className={`flex items-end gap-2 mb-3 animate-slide-up px-2 transition-colors ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {!isMe && (
+                        <button onClick={() => setViewingProfile(msg.sender)} className={`w-9 h-9 rounded-full flex items-center justify-center font-bold shrink-0 text-white text-sm shadow-md transition-transform hover:scale-110 ${profile.bg}`}>{msg.sender[0]}</button>
+                        )}
+                        <div className={`flex flex-col max-w-[85%] md:max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-baseline gap-2 mb-1 px-1">
+                            {!isMe && <button onClick={() => setViewingProfile(msg.sender)} className={`font-bold text-xs hover:underline ${profile.color}`}>{msg.sender}</button>}
+                            <span className={`text-[10px] font-mono ${isPast ? 'text-slate-400' : 'text-slate-600'}`}>{isPast ? '10/10' : 'Now'}</span>
+                        </div>
+                        <div className={`px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap shadow-sm ${isMe ? (isPast ? 'bg-blue-500 text-white rounded-l-2xl rounded-tr-2xl' : 'bg-pink-600 text-white rounded-l-2xl rounded-tr-2xl') : (isPast ? 'bg-white text-slate-700 border border-blue-100 rounded-r-2xl rounded-tl-2xl' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-r-2xl rounded-tl-2xl')}`}>{msg.text}</div>
+                        </div>
+                        {isMe && (
+                        <button onClick={() => setViewingProfile(msg.sender)} className={`w-9 h-9 rounded-full flex items-center justify-center font-bold shrink-0 text-white text-sm shadow-md transition-transform hover:scale-110 ${profile.bg}`}>{msg.sender[0]}</button>
+                        )}
+                    </div>
+                    );
+                case 'dm_receive':
+                    return (
+                    <div key={index} className="flex justify-start mb-4 animate-slide-right px-2">
+                        <button onClick={() => setViewingProfile('なぬりん')} className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-xs font-bold shrink-0 mr-2 shadow-lg shadow-purple-900/40 hover:scale-105 transition-transform">な</button>
+                        <div className={`${isPast ? 'bg-white border-purple-200 text-slate-700' : 'bg-slate-800 border-purple-900/50 text-slate-200'} border rounded-r-xl rounded-tl-xl px-4 py-2 max-w-[85%] text-sm shadow-sm relative`}>
+                        <div className="text-[10px] text-purple-400 mb-1 font-bold flex items-center gap-1"><MessageCircle size={10} /> なぬりん (Private)</div>
+                        {msg.text}
+                        </div>
+                    </div>
+                    );
+                case 'dm_send':
+                    return (
+                    <div key={index} className="flex justify-end mb-4 animate-slide-left px-2">
+                        <div className={`${isPast ? 'bg-purple-100 border-purple-200 text-purple-900' : 'bg-purple-900/30 border-purple-700/50 text-purple-100'} border rounded-l-xl rounded-tr-xl px-4 py-2 max-w-[85%] text-sm`}>
+                        {msg.text}
+                        </div>
+                    </div>
+                    );
+                default: return null;
+                }
+            };
+
+            const scriptLength = episodes.find(e => e.id === currentEpisodeId)?.script.length || 0;
+
+            return (
+                <div className={`flex justify-center items-center min-h-screen font-sans overflow-hidden transition-colors duration-1000 ${bgColor} ${textColor}`}>
+                
+                <div className={`w-full h-screen md:h-[90vh] md:max-w-6xl flex overflow-hidden md:rounded-3xl shadow-2xl transition-all duration-1000 ${isPast ? 'bg-[#eef2f6] border-4 border-blue-100' : 'bg-[#050505] border border-slate-800'}`}>
+                    
+                    {/* Sidebar */}
+                    <div className={`shrink-0 flex md:flex-col overflow-x-auto md:overflow-y-auto ${isPast ? 'bg-white border-r border-blue-100' : 'bg-[#0f0f0f] border-r border-slate-800'} md:w-20 w-full h-16 md:h-full items-center py-2 md:py-6 gap-3 px-4 z-30`}>
+                    <div className="hidden md:block mb-4 text-[10px] font-bold opacity-50 tracking-widest text-center">MEMBERS</div>
+                    {profiles && Object.keys(profiles).filter(name => name !== 'あざみん(未来)' && name !== 'undefined' && name !== 'u').map((name) => {
+                        const p = profiles[name];
+                        if (!p) return null;
+                        return (
+                        <button 
+                            key={name}
+                            onClick={() => setViewingProfile(name)}
+                            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-md transition-all hover:scale-110 hover:ring-2 ring-offset-2 ring-offset-transparent ${p.bg} ${p.color ? p.color.replace('text-', 'ring-') : ''} relative group`}
+                        >
+                            {name[0]}
+                            <span className={`absolute bottom-0 right-0 w-3 h-3 border-2 rounded-full ${isPast ? 'border-white' : 'border-black'} ${p.status === 'online' ? 'bg-green-500' : p.status === 'error' ? 'bg-red-500 animate-ping' : 'bg-gray-500'}`}></span>
+                        </button>
+                        );
+                    })}
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1 flex flex-col relative overflow-hidden">
+                    
+                    <div className={`absolute top-16 left-0 right-0 z-40 px-4 transition-all duration-500 transform ${showDMAlert ? 'translate-y-0 opacity-100' : '-translate-y-10 opacity-0 pointer-events-none'}`}>
+                        <button onClick={() => setActiveTab('dm')} className="w-full bg-purple-600 text-white p-4 rounded-xl shadow-2xl flex items-center justify-between animate-bounce-short">
+                            <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center"><MessageCircle /></div>
+                            <div className="text-left"><div className="font-bold text-sm">なぬりんから新着メッセージ</div><div className="text-xs opacity-90">タップして確認する</div></div>
+                            </div>
+                            <ChevronRight />
+                        </button>
+                    </div>
+
+                    <div className={`h-16 border-b flex items-center justify-between px-4 shrink-0 z-20 transition-colors duration-1000 ${headerBg}`}>
+                        <div className="flex items-center gap-2">
+                        <div onClick={() => setShowMenu(true)} className={`p-2 rounded-full cursor-pointer transition-colors ${isPast ? 'hover:bg-blue-100 text-slate-600' : 'hover:bg-slate-800 text-slate-400'}`}><Menu size={20} /></div>
+                        <div><h1 className="font-bold text-sm md:text-base flex items-center gap-2"><span className={`text-xs px-2 py-0.5 rounded-md ${isPast ? 'bg-blue-100 text-blue-600' : 'bg-red-900/30 text-red-500'}`}>Ep.{currentEpisodeId}</span><span className="truncate max-w-[160px]">{episodes.find(e => e.id === currentEpisodeId)?.title || "Loading..."}</span></h1></div>
+                        </div>
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isPast ? 'bg-white border-blue-200 text-blue-600 shadow-sm' : 'bg-red-950/20 border-red-900/50 text-red-500'}`}>{isPast ? <Clock size={14} className="animate-spin-slow" /> : <AlertTriangle size={14} />}<span className="font-mono font-bold text-xs">{currentYear}</span></div>
+                    </div>
+
+                    {viewingProfile && (
+                        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+                        <div className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl relative transform transition-all scale-100 ${isPast ? 'bg-white' : 'bg-slate-900 border border-slate-700'}`}>
+                            <button onClick={() => setViewingProfile(null)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-black/10 text-slate-400"><X size={20} /></button>
+                            <div className="flex flex-col items-center">
+                                {(() => {
+                                const p = getSafeProfile(viewingProfile);
+                                return (
+                                    <>
+                                    <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold text-white mb-4 shadow-lg ${p.bg}`}>{viewingProfile[0]}</div>
+                                    <h2 className={`text-2xl font-bold mb-1 ${p.color}`}>{viewingProfile}</h2>
+                                    <div className={`text-xs font-mono px-3 py-1 rounded-full mb-6 font-bold tracking-wider ${isPast ? 'bg-slate-100 text-slate-500' : 'bg-slate-800 text-slate-400'}`}>{p.role} | {p.age}</div>
+                                    <div className={`w-full p-5 rounded-2xl text-sm leading-relaxed ${isPast ? 'bg-blue-50 text-slate-700' : 'bg-black/40 text-slate-300'}`}>
+                                        <div className="flex items-center gap-2 font-bold text-xs mb-3 opacity-70 border-b border-black/10 pb-2"><span className={`w-2 h-2 rounded-full ${p.status === 'online' ? 'bg-green-500' : p.status === 'error' ? 'bg-red-500' : 'bg-gray-500'}`}></span>STATUS: {p.status.toUpperCase()}</div>
+                                        {p.desc}
+                                    </div>
+                                    </>
+                                );
+                                })()}
+                            </div>
+                        </div>
+                        </div>
+                    )}
+
+                    {showMenu && (
+                        <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-md flex flex-col p-6 animate-fade-in">
+                        <div className="flex justify-between items-center mb-8 text-white"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen size={20} className="text-pink-500" /> LOG ARCHIVES</h2><button onClick={() => setShowMenu(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button></div>
+                        
+                        {/* Chapter Tabs */}
+                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+                            {chapters.map(c => (
+                            <button 
+                                key={c.id} 
+                                onClick={() => setSelectedChapter(c.id)}
+                                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${selectedChapter === c.id ? 'bg-pink-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            >
+                                {c.title}
+                            </button>
+                            ))}
+                        </div>
+
+                        <div className="space-y-3 overflow-y-auto">
+                            {episodes.filter(ep => ep.chapter === selectedChapter).length > 0 ? (
+                            episodes.filter(ep => ep.chapter === selectedChapter).map((ep) => (
+                                <button key={ep.id} onClick={() => { setCurrentEpisodeId(ep.id); setShowMenu(false); }} className={`w-full text-left p-4 rounded-2xl border transition-all group ${currentEpisodeId === ep.id ? 'bg-pink-600 text-white border-pink-500 shadow-lg shadow-pink-900/50' : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200'}`}>
+                                <div className="flex justify-between items-start mb-1"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${currentEpisodeId === ep.id ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500'}`}>EPISODE {ep.id}</span>{currentEpisodeId === ep.id && <Play size={12} fill="currentColor" />}</div>
+                                <h3 className="text-base font-bold">{ep.title}</h3>
+                                <p className={`text-xs mt-1 line-clamp-2 ${currentEpisodeId === ep.id ? 'text-pink-100' : 'text-slate-600'}`}>{ep.description}</p>
+                                </button>
+                            ))
+                            ) : (
+                            <div className="text-center text-slate-500 py-10 flex flex-col items-center">
+                                <Lock size={32} className="mb-4 opacity-50" />
+                                <p className="text-sm">DATA NOT FOUND</p>
+                                <p className="text-xs opacity-50">この章のログはまだ解放されていません。</p>
+                            </div>
+                            )}
+                        </div>
+                        </div>
+                    )}
+
+                    <div className={`flex-1 flex flex-col relative overflow-hidden transition-colors duration-1000 ${isPast ? 'bg-[#f0f4f8]' : 'bg-[#0a0a0a]'}`}>
+                        <div className={`flex border-b shrink-0 ${isPast ? 'bg-white border-blue-100' : 'bg-slate-900/50 border-slate-800'}`}>
+                        <button onClick={() => setActiveTab('main')} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-all relative ${activeTab === 'main' ? (isPast ? 'text-blue-600' : 'text-white') : 'text-slate-400'}`}>
+                            <Hash size={14} /> MAIN ROOM
+                            {activeTab === 'main' && <div className={`absolute bottom-0 left-0 w-full h-0.5 ${isPast ? 'bg-blue-500' : 'bg-pink-500'}`}></div>}
+                        </button>
+                        <button onClick={() => setActiveTab('dm')} className={`flex-1 py-3 text-xs font-bold flex items-center justify-center gap-2 transition-all relative ${activeTab === 'dm' ? (isPast ? 'text-purple-600' : 'text-purple-300') : 'text-slate-400'}`}>
+                            <MessageCircle size={14} /> DM
+                            {messages.some(m => (m.type === 'dm_receive' || m.type === 'dm_send')) && activeTab !== 'dm' && <span className="w-2 h-2 bg-purple-500 rounded-full animate-ping ml-1"></span>}
+                            {activeTab === 'dm' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-500"></div>}
+                        </button>
+                        </div>
+
+                        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
+                        {messages.length === 0 && (
+                            <div className="flex flex-col items-center justify-center h-full space-y-4 opacity-50">
+                            <RefreshCcw size={32} className={isPast ? 'text-blue-300' : 'text-slate-700'} />
+                            <p className={`text-xs tracking-widest ${isPast ? 'text-blue-400' : 'text-slate-600'}`}>INITIALIZING LOGS...</p>
+                            </div>
+                        )}
+                        {messages.map((msg, i) => renderMessage(msg, i))}
+                        {isTyping && (
+                            <div className={`flex items-center gap-2 text-xs italic ml-4 py-2 animate-pulse ${isPast ? 'text-blue-400' : 'text-slate-600'}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce delay-100"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce delay-200"></span>
+                            </div>
+                        )}
+                        {currentStep >= scriptLength && currentEpisodeId < episodes.length && (
+                            <div className="py-8 flex justify-center animate-fade-in-up">
+                            <button onClick={() => setCurrentEpisodeId(currentEpisodeId + 1)} className={`flex items-center gap-3 px-6 py-3 rounded-full font-bold shadow-lg transition-transform hover:scale-105 ${isPast ? 'bg-blue-500 hover:bg-blue-400 text-white' : 'bg-pink-600 hover:bg-pink-500 text-white'}`}>NEXT EPISODE <ChevronRight size={16} /></button>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} className="h-4" />
+                        </div>
+
+                        <div className={`p-3 border-t shrink-0 safe-area-bottom ${isPast ? 'bg-white border-blue-100' : 'bg-slate-900 border-slate-800'}`}>
+                        <button onClick={handleNext} disabled={isTyping || currentStep >= scriptLength} className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold tracking-widest transition-all ${currentStep >= scriptLength ? (isPast ? 'bg-slate-100 text-slate-400' : 'bg-slate-800 text-slate-600') : (isPast ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg shadow-blue-200 hover:shadow-xl' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-600 hover:border-pink-500')}`}>
+                            {currentStep >= scriptLength ? <span className="flex items-center gap-2"><BookOpen size={16} /> END OF LOG</span> : <span className="flex items-center gap-2"><Play size={16} fill="currentColor" /> TAP TO READ</span>}
+                        </button>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<ChatNovelApp />);
+    </script>
+</body>
+</html>
